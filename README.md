@@ -9,5 +9,5 @@ New material will be uploded as the project progresses. One goal is to provide a
 ### Progress (list will be appended to along the way)
 - [x] Rough 3d-model
 - [ ] Refined 3d-model ready for printing
-- [ ] Forward / inverse kinematics prototype script
+- [x] Forward / inverse kinematics prototype script
 - [ ] Path generation prototype scripe
