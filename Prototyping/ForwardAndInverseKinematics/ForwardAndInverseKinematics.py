@@ -4,25 +4,37 @@ import random
 '''
 IMPORTANT:
 6 axis robot.
-Right handed coordinate systems.
+Right handed coordinate systems. Angles in radians, lengths in meters.
 
 When all joints are at zero, the upper arm and the lower arm are at 90 degrees from each other and all 
 frames t1-t6 are orientated as the world coordinate system.
 
 This script is a prototyping script for the forward and inverse kinematics and will not be part of the final robot.
+
+Technical details:
+The 3 last links are put togeth on a way that they act as a spherical joint with its origin determined by the first
+three thetas.
+
+Terminology: 
+mpc: Mounting Plate Center, the frame located at the end of the manipulator, where the tool is fastened.
+theta1 - theta6: joint angles from first (base) to last (end of manipulator) joint.
+L1 - L5: link lengths. L1 is link length from base to the first joint, L2 is link length from joint 1 to joint 2 etc.
 '''
 
-L1 = 0.0
-L2 = 0.3
-L3 = 0.2
-L4 = 0.0
-L5 = 0.1
 EPS3 = 1.0e-3
 EPS4 = 1.0e-4
 EPS5 = 1.0e-5
 EPS6 = 1.0e-6
 EPS10 = 1.0e-10
 
+# Link lengths.
+L1 = 0.0
+L2 = 0.3
+L3 = 0.2
+L4 = 0.0
+L5 = 0.1
+
+# Joint limits.
 THETA_1_RANGE_U = math.pi/2 - EPS5
 THETA_1_RANGE_L = -math.pi/2 + EPS5
 THETA_2_RANGE_U = math.pi/2
@@ -37,71 +49,66 @@ THETA_6_RANGE_U = math.pi - EPS5
 THETA_6_RANGE_L = -math.pi + EPS5
 
 def inverseKin123(p):
-    Lp = math.sqrt(p[0]*p[0] + p[1]*p[1] + p[2]*p[2])
+    # Position p is the position of frame t4 and t5, and is entirely determined by the first three thetas.
+
     theta1 = math.atan2(p[1], p[0])
 
-    theta1_flipped = False
     # If theta1 is above pi/2 or below -pi/2, then we try to reach the point by bending backwards, so theta1 is rotated pi rads.
     if (theta1 > THETA_1_RANGE_U + EPS6):
         theta1 -= math.pi
-        theta1_flipped = True
     elif (theta1 < THETA_1_RANGE_L - EPS6):
         theta1 += math.pi
-        theta1_flipped = True
 
-    # Might be a few decimal points under or over 1 due to double precision error. Make that excaclty +-1 to ensure acos works.
-    l = almost_one_to_one(math.sqrt(p[0]*p[0] + p[1]*p[1])/Lp) # acos(l) is angle between p and xy plane
-    m = almost_one_to_one((L2*L2 + Lp*Lp - L3*L3) / (2*L2*Lp)) # L2, Lp, L3 form triangle of known sides. Look up triangle SSS for reference.
-    p_xy_theta = 0
+    # Transform p to xz plane (like theta1 would be rotad to place p in the xz-plane).
+    px_tr_xz = get_sign(p[0]) * math.sqrt(p[0]*p[0] + p[1]*p[1])
+    pz_tr_xz = p[2]
+    p_tr_xz = ([px_tr_xz, 0, pz_tr_xz])
 
-    if (p[2] < 0): # We are under the xy-plane.
-        p_xy_theta = -math.acos(l)
-    elif (theta1_flipped): # Bending backwards.
-        p_xy_theta = math.pi - math.acos(l)
-    else:
-        p_xy_theta = math.acos(l)
+    # p_xy_theta is the angle between vector p and the xy-plane, taking bending backwards into consideration (can be above pi/2).
+    p_xy_theta = math.atan2(p_tr_xz[2], p_tr_xz[0])
 
+    # The length of vector p.
+    Lp = get_len(p)
+
+    # L2, Lp, L3 form triangle of known sides. Look up triangle SSS for reference.
+    m = almost_one_to_one((L2*L2 + Lp*Lp - L3*L3) / (2*L2*Lp))
+    
     theta2 = math.pi/2 - p_xy_theta - math.acos(m)
 
-    # Might be a few decimal points under or over 1 due to double precision error. Make that excaclty +-1 to ensure acos works.
-    n = almost_one_to_one((L2*L2 + L3*L3 - Lp*Lp) / (2*L2*L3)) # L2, Lp, L3 form triangle of known sides. Look up triangle SSS for reference.
+    # L2, Lp, L3 form triangle of known sides. Look up triangle SSS for reference.
+    n = almost_one_to_one((L2*L2 + L3*L3 - Lp*Lp) / (2*L2*L3))
     theta3 = math.pi/2 - math.acos(n)
 
     return [theta1, theta2, theta3]
 
-def almost_one_to_one(a):
-    if (abs(abs(a) - 1) < EPS10):
-        return a / abs(a)
-    return a
-
-def inverseKinFull(tcp_transform):
+def inverseKinFull(mpc_transform):
     m_temp = getUnityMatrix()
     m_temp[0][3] = -L5
-    # p is pos of global t4
-    p = get_pos(mat_mul(tcp_transform, m_temp))
+    # p is pos of global t4.
+    p = get_pos(mat_mul(mpc_transform, m_temp))
 
-    # Get theta1-3 and t1-3 
+    # Get theta1-3 and t1-3. 
     theta1_3 = inverseKin123(p)
     t1, t2, t3 = forwardKinematics123(theta1_3)
 
     t4_unrot_global = mat_mul_list([t1, t2, t3, getT4(0)])  # Pos and rot x axis are already correct.
 
-    # p_tcp is the vector from p to tcp
-    p_tcp = vec_sub(get_pos(tcp_transform), p)
+    # p_mpc is the vector from p to mpc.
+    p_mpc = vec_sub(get_pos(mpc_transform), p)
 
-    # p_t3t4 is the vecor from t3 to t4 in global coordinates
+    # p_t3t4 is the vecor from t3 to t4 in global coordinates.
     p_t3t4 = normalize(get_rot_x(t4_unrot_global))
 
     # Axis 4:
-    t4ry = vec_cross(p_t3t4, p_tcp)
-    if (get_len(t4ry) < EPS6): #In case p_t3t4 and p_tcp are parallel (theta5 zero), then 4ry is same ias 3ry, or what 4ry_unrot is already.
+    t4ry = vec_cross(p_t3t4, p_mpc)
+    if (get_len(t4ry) < EPS6): #In case p_t3t4 and p_mpc are parallel (theta5 zero), then 4ry is same ias 3ry, or what 4ry_unrot is already.
         t4ry = get_rot_y(t4_unrot_global)
 
     t4ry = normalize(t4ry)
     t4rz = vec_cross(get_rot_x(t4_unrot_global), t4ry)
     t4rz = normalize(t4rz)
     
-    t4_global = mat_copy(t4_unrot_global) #rot x is already correct, just apply rot y and rot z
+    t4_global = mat_copy(t4_unrot_global) #rot x is already correct, just apply rot y and rot z.
     set_rot_y(t4_global, t4ry)
     set_rot_z(t4_global, t4rz)
 
@@ -112,15 +119,15 @@ def inverseKinFull(tcp_transform):
     theta4 = theta4_sign * get_angle(get_rot_y(t4_unrot_global), get_rot_y(t4_global))
 
     # Axis 5:
-    t5_global = mat_mul(t4_global, getT5(0)) #pos and rot y is correct.
+    t5_global = mat_mul(t4_global, getT5(0)) #pos and rot y is already correct.
 
-    set_rot_x(t5_global, normalize(get_rot_x(tcp_transform)))
+    set_rot_x(t5_global, normalize(get_rot_x(mpc_transform)))
     set_rot_z(t5_global, normalize(vec_cross(get_rot_x(t5_global), get_rot_y(t5_global))))
 
     theta5 = get_angle(get_rot_x(t4_global), get_rot_x(t5_global))
 
     # Axis 6:
-    t6_global = tcp_transform # t6 global is by definition same as tcp_transform 
+    t6_global = mpc_transform # t6 global is by definition same as mpc_transform .
 
     s6 = vec_scalar_prod(get_rot_y(t6_global), get_rot_z(t5_global))
     if (is_close_to_zero(s6)): # In case rot6y and rot5z are perpendicular, use rot6y and rot5_y to decide the sign.
@@ -131,6 +138,48 @@ def inverseKinFull(tcp_transform):
 
     theta1_3 = inverseKin123(p)
     return [theta1_3[0], theta1_3[1], theta1_3[2], theta4, theta5, theta6] 
+
+def forwardKinematics123(theta1_3):
+    t1 = getT1(theta1_3[0])
+    t2 = getT2(theta1_3[1])
+    t3 = getT3(theta1_3[2])
+
+    return t1, t2, t3
+
+def forwardKinematicsFull(theta1_6):
+    return mat_mul_list([getT1(theta1_6[0]), getT2(theta1_6[1]), getT3(theta1_6[2]), 
+        getT4(theta1_6[3]), getT5(theta1_6[4]), getT6(theta1_6[5])])
+
+def forwardKinematicsFull_debug(theta1_6):
+    t1g = getT1(theta1_6[0])
+    t2g = mat_mul(t1g, getT2(theta1_6[1]))
+    t3g = mat_mul(t2g, getT3(theta1_6[2]))
+    t4g = mat_mul(t3g, getT4(theta1_6[3]))
+    t5g = mat_mul(t4g, getT5(theta1_6[4]))
+    t6g = mat_mul(t5g, getT6(theta1_6[5]))
+    print("thetas; ", theta1_6)
+    print("t1g")
+    printMatrix(t1g)
+    print("t2g")
+    printMatrix(t2g)
+    print("t3g")
+    printMatrix(t3g)
+    print("t4g")
+    printMatrix(t4g)
+    print("t5g")
+    printMatrix(t5g)
+    print("t6g")
+    printMatrix(t6g)
+
+# This method can be used to ensure +-1 can be passed to for example acos() without going outside range due to 
+# floating point precision error.
+def almost_one_to_one(a):
+    if (abs(abs(a) - 1) < EPS10):
+        return a / abs(a)
+    return a
+
+def is_close_to_zero(a):
+    return abs(a) < EPS6
 
 def mat_copy(s):
     r = getUnityMatrix()
@@ -152,7 +201,7 @@ def get_sign(a):
     return -1
 
 def get_angle(v1, v2):
-    return math.acos(vec_scalar_prod(v1, v2))
+    return math.acos(almost_one_to_one(vec_scalar_prod(v1, v2)))
 
 def get_rot_x(m):
     return [m[0][0], m[1][0], m[2][0]]
@@ -198,14 +247,7 @@ def vec_cross(v1, v2):
             v1[0] * v2[1] - v1[1] * v2[0]]
 
 def vec_scalar_prod(v1, v2):
-    return almost_one_to_one(v1[0]*v2[0] + v1[1]*v2[1] + v1[2]*v2[2])
-
-def printMatrix(m):
-    print(m[0])
-    print(m[1])
-    print(m[2])
-    print(m[3])
-    print("\n")
+    return v1[0]*v2[0] + v1[1]*v2[1] + v1[2]*v2[2]
 
 def getUnityMatrix():
     return [[1, 0, 0, 0],
@@ -275,41 +317,10 @@ def mat_mul(m1, m2):
             [m20, m21, m22, m23],
             [m30, m31, m32, m33]]
 
-def forwardKinematics123(theta1_3):
-    t1 = getT1(theta1_3[0])
-    t2 = getT2(theta1_3[1])
-    t3 = getT3(theta1_3[2])
-
-    return t1, t2, t3
-
 def mat_mul_list(m_l):
     if (len(m_l) == 1):
         return m_l[0]
     return mat_mul(m_l[0], mat_mul_list(m_l[1 : len(m_l)]))
-
-def forwardKinematicsFull(theta1_6):
-    return mat_mul_list([getT1(theta1_6[0]), getT2(theta1_6[1]), getT3(theta1_6[2]), getT4(theta1_6[3]), getT5(theta1_6[4]), getT6(theta1_6[5])])
-
-def forwardKinematicsFull_debug(theta1_6):
-    t1g = getT1(theta1_6[0])
-    t2g = mat_mul(t1g, getT2(theta1_6[1]))
-    t3g = mat_mul(t2g, getT3(theta1_6[2]))
-    t4g = mat_mul(t3g, getT4(theta1_6[3]))
-    t5g = mat_mul(t4g, getT5(theta1_6[4]))
-    t6g = mat_mul(t5g, getT6(theta1_6[5]))
-    print("thetas; ", theta1_6)
-    print("t1g")
-    printMatrix(t1g)
-    print("t2g")
-    printMatrix(t2g)
-    print("t3g")
-    printMatrix(t3g)
-    print("t4g")
-    printMatrix(t4g)
-    print("t5g")
-    printMatrix(t5g)
-    print("t6g")
-    printMatrix(t6g)
 
 def is_mat_same(m1, m2):
     for i in range(0,4):
@@ -323,7 +334,6 @@ def is_ang_same(a1, a2):
         if (abs(a1[i] - a2[i]) > EPS3):
             return False
     return True
-
 
 def is_angs_within_limits(ang):
     if (ang[0] < THETA_1_RANGE_L - EPS6 or ang[0] > THETA_1_RANGE_U + EPS6):
@@ -340,33 +350,36 @@ def is_angs_within_limits(ang):
         return False
     return True
 
-# Get input angles, do forward kinematics for those, then do inverse kinematics
+def printMatrix(m):
+    print(m[0])
+    print(m[1])
+    print(m[2])
+    print(m[3])
+    print("\n")
+
+def printAngles(msg, ang):
+    print(msg, "{:.5f}".format(ang[0]), "{:.5f}".format(ang[1]), "{:.5f}".format(ang[2]), 
+        "{:.5f}".format(ang[3]), "{:.5f}".format(ang[4]), "{:.5f}".format(ang[5]))
+
+# Get input angles, do forward kinematics for those to get , then do inverse kinematics
 # for the result of the forward kinematics and match up the input to the output.
 def runKinTest(ang):
-    tcp = forwardKinematicsFull(ang)
+    mpc = forwardKinematicsFull(ang)
 
-    inv_kin_thetas = inverseKinFull(tcp)
+    inv_kin_thetas = inverseKinFull(mpc)
 
     ang_result = is_angs_within_limits(inv_kin_thetas) and is_ang_same(inv_kin_thetas, ang)
     if (ang_result):
-        print("Test passed! Thetas: ", ang)
+        printAngles("Test passed! Thetas: ", ang)
         return True
     else:
         print("Test failed.")
-        print("Test theta in was: ", ang)
-        print("Test theta out was: ", inv_kin_thetas)
-        print("Test Tcp in was: ")
-        printMatrix(tcp)
+        printAngles("Test theta in was:  ", ang)
+        printAngles("Test theta out was: ", inv_kin_thetas)
+        print("Test mpc in was: ")
+        printMatrix(mpc)
 
         return False
-
-def is_close_to_zero(a):
-    return abs(a) < EPS6
-
-def is_singularity(ang):
-    if (is_close_to_zero(ang[4])):
-        return True
-    return False
 
 def filter(ang):
     theta1Allow = True#is_close_to_zero(ang[0])
@@ -394,9 +407,10 @@ def run_tests_right_angles():
                             t6_ = t6 * math.pi/2
                             if (filter([t1_, t2_, t3_, t4_, t5_, t6_])):
                                     if (not runKinTest([t1_, t2_, t3_, t4_, t5_, t6_])):
-                                        return
+                                        return False
+    return True
 
-def test_random_angles(num_runs):
+def test_random_positions(num_runs):
     for i in range(0, num_runs):
         theta1 = random.uniform(THETA_1_RANGE_L + EPS5, THETA_1_RANGE_U - EPS5)
         theta2 = random.uniform(THETA_2_RANGE_L + EPS5, THETA_2_RANGE_U - EPS5)
@@ -406,13 +420,24 @@ def test_random_angles(num_runs):
         theta6 = random.uniform(THETA_6_RANGE_L + EPS5, THETA_6_RANGE_U - EPS5)
         
         if (filter([theta1, theta2, theta3, theta4, theta5, theta6])):
-            print("Test starting with angles: ", [theta1, theta2, theta3, theta4, theta5, theta6])
             if (not runKinTest([theta1, theta2, theta3, theta4, theta5, theta6])):
-                return
+                return False
+    return True
         
 
 def main():
-    #run_tests_right_angles()
-    test_random_angles(10000)
+    print("Hit Enter to run inverse kinematics right angles tests.")
+    unused = input()
+    right_angles_result = run_tests_right_angles()
+    if (right_angles_result):
+        print("All inverse kinematics right angles tests passed.")
+
+    NUM_RANDOM_POS = 10000
+    print("\nHit Enter to run inverse kinematics randomly generated positions test. Generating %r positions." % NUM_RANDOM_POS)
+    unused = input()
+    random_pos_result = test_random_positions(NUM_RANDOM_POS)
+
+    if (random_pos_result):
+        print("All inverse kinematics randomly generated positions tests passed.")
 if __name__ == "__main__":
     main()
