@@ -11,5 +11,4 @@ New material will be uploded as the project progresses. One goal is to provide a
 - [ ] Refined 3d-model ready for printing
 - [x] Forward / inverse kinematics prototype script
 - [x] I2C slave AVR Atmega328
-- [x] I2C slave AVR Atmega328
 - [ ] I2C master Raspberry PI 3
