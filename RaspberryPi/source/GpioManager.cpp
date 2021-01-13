@@ -24,20 +24,14 @@ namespace
 	}
 }
 
-GpioManager* GpioManager::getInstance()
+bool GpioManager::initialize(const std::vector<int>& motorAddresses)
 {
-	static GpioManager instance;
-	return &instance;
-}
-
-void GpioManager::initialize(const std::vector<int>& motorAddresses)
-{
-	constexpr int numMotors = 1;
+	constexpr int numMotors = 1; // <- for debugging, set to 6 later.
 	if (motorAddresses.size() != numMotors)
 	{
 		std::cerr << "Initialization of GpioManager failed, expected " << numMotors << " motor "
 			<< "addresses but got "<< motorAddresses.size() << ".\n";
-		return;
+		return false;
 	}
 
 #ifdef __linux__
@@ -45,7 +39,7 @@ void GpioManager::initialize(const std::vector<int>& motorAddresses)
 	{
 		std::cerr << "Initialization of GpioManager failed, call to wiringPiSetupGpio returned "
 			<< "error.\n";
-		return;
+		return false;
 	}
 
 	for (int i = 0; i < numMotors; i++)
@@ -56,14 +50,15 @@ void GpioManager::initialize(const std::vector<int>& motorAddresses)
 			std::cerr << "Initialization of GpioManager failed, call to wiringPiI2CSetup() "
 				<< "returned -1.\n";
 			motorHandles.clear();
-			return;
+			return false;
 		}
 
 		motorHandles.push_back(handle);
 	}
 #endif
 
-	isInitialized = true;
+	initialized = true;
+	return true;
 }
 
 
@@ -73,29 +68,26 @@ void GpioManager::sendI2C(int motor, float inData)
 	sendI2C(motor, data);
 }
 
-void GpioManager::sendI2C(int motor, const std::vector<float>& inData)
+void GpioManager::sendI2C(int motor, std::vector<float> data)
 {
 	constexpr unsigned int I2CStop = 0xFFFFFFFF;
 	constexpr unsigned int MaxNumBytes = 256;
 
-	if (!isInitialized)
+	if (!initialized)
 	{
 		printNotInitializedError("GpioManager::sendI2C(...)");
 		return;
 	}
 
-	if (sizeof(float) * inData.size() > MaxNumBytes)
+	if (sizeof(float) * data.size() > MaxNumBytes)
 	{
 		std::cerr << "Cannot send more than " << MaxNumBytes << "bytes in one transfer. "
 			<< "Nothing is sent.";
 		return;
 	}
 
-	// Copy the data vector in order to append the I2CStop bytes.
-	// This copy is not optimal, but sending the data as a single data stream increases the
-	// data transfer stability. The data array is not allowed to be more than MaxNumBytes bytes
-	// long so the copy is not that expensive.
-	std::vector<float> data = inData;
+	// Append the I2CStop bytes. This wont effect the original passed vector since it is
+	// passed by value.
 	floatint_t stop;
 	stop.i = I2CStop;
 	data.push_back(stop.f);
@@ -121,4 +113,9 @@ void GpioManager::debugSendI2C(int motor, unsigned int data)
 
 	std::cout << "Byes sent: " << bytesSent << "\n";
 #endif
+}
+
+bool GpioManager::isInitialized()
+{
+	return initialized;
 }

@@ -5,20 +5,16 @@
 class GpioManager
 {
 public:
-	GpioManager(const GpioManager&) = delete;
-	void operator=(const GpioManager&) = delete;
+	bool initialize(const std::vector<int>& motorAddresses);
 
-	static GpioManager* getInstance();
-
-	void initialize(const std::vector<int>& motorAddresses);
-
+	// TODO: motor should be an enum, not an int.
 	void sendI2C(int motor, float data);
-	void sendI2C(int motor, const std::vector<float>& data);
+	void sendI2C(int motor, std::vector<float> data);
 	void debugSendI2C(int motor, unsigned int data);
 
-private:
-	GpioManager() = default;
+	bool isInitialized();
 
-	bool isInitialized = false;
+private:
+	bool initialized = false;
 	std::vector<int> motorHandles;
 };
