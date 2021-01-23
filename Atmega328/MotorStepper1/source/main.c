@@ -1,24 +1,32 @@
+// Using the internal oscillator at 8 Mhz.
+// Remember to set the appropriate fuses for clock selection prior to loading this program.
+#define F_CPU 8000000UL
+
 #include <avr/io.h>
 #include <util/delay.h>
 #include <util/twi.h>
 #include <avr/interrupt.h>
 
-// Using the internal oscillator at 8 Mhz.
-// Remember to set the appropriate fuses for clock selection prior to loading this program.
-#define F_CPU 8000000UL
 #define I2C_ADDR 0x11
-#define STOP_BYTE 0xFF
-#define BUFFER_SIZE 256
-#define FLOAT_SIZE 4
+#define BUFFER_SIZE 80
+#define COMMAND_SIZE 8
 
-union floatint_t
+struct MotorCommand
 {
-	float f;
-	uint8_t i[FLOAT_SIZE];
+	float speed;
+	float angle;
 };
 
-volatile int32_t numBytesReceived;
-volatile union floatint_t data[BUFFER_SIZE];
+union command_t
+{
+	struct MotorCommand mc;
+	uint8_t i[COMMAND_SIZE];
+};
+
+volatile uint8_t lastByteRecievedInd;
+volatile uint8_t lastExecutedCommandInd;
+volatile union command_t circularBuffer[BUFFER_SIZE];
+uint8_t MAX_COMMAND_INDEX;
 
 void debugBlinkBit(uint8_t b)
 {
@@ -45,26 +53,26 @@ void debugBlinkByte(uint8_t byte)
 	}
 }
 
-void debugBlinkFloat(float val)
+void debugBlinkNum(uint8_t num)
 {
-	// LED "prints" a float (4 bytes), flashes twice for a 1-bit and once for a 0-bit.
-	// Most significant bit first.
-	union floatint_t fi;
-	fi.f = val;
-	debugBlinkByte(fi.i[3]);
-	_delay_ms(3000);
-	debugBlinkByte(fi.i[2]);
-	_delay_ms(3000);
-	debugBlinkByte(fi.i[1]);
-	_delay_ms(3000);
-	debugBlinkByte(fi.i[0]);
+	uint8_t i;
+	for(i = 0; i < num; i++)
+	{
+		debugBlinkBit(0);
+	}
 }
 
 void dataReceived(uint8_t inData)
 {
-	uint8_t index = numBytesReceived / FLOAT_SIZE;
-	data[index].i[numBytesReceived % FLOAT_SIZE] = inData;
-	numBytesReceived++;
+	lastByteRecievedInd++;	
+	if (lastByteRecievedInd >= BUFFER_SIZE)
+	{
+		// Reset the buffer index, i.e. make it behave as a circular buffer.
+		lastByteRecievedInd = 0;
+	}
+
+	uint8_t index = lastByteRecievedInd / COMMAND_SIZE;
+	circularBuffer[index].i[lastByteRecievedInd % COMMAND_SIZE] = inData;
 }
 
 void setupI2c()
@@ -78,72 +86,58 @@ void setupI2c()
 	sei();
 }
 
-uint8_t isTransmissionComplete()
+uint8_t getLastReceivedCommandInd()
 {
-	if (numBytesReceived >= FLOAT_SIZE && numBytesReceived % FLOAT_SIZE == 0)
+	if (lastByteRecievedInd < 7)
 	{
-		uint8_t lastIndex = (numBytesReceived / FLOAT_SIZE) - 1;
-
-		// Return true if all bytes of the last sent float was STOP_BYTE.
-		return data[lastIndex].i[0] == STOP_BYTE && data[lastIndex].i[1] == STOP_BYTE &&
-			data[lastIndex].i[2] == STOP_BYTE && data[lastIndex].i[3] == STOP_BYTE;
+		return MAX_COMMAND_INDEX;
 	}
-	return 0;
-}
-
-uint8_t min(uint8_t a, uint8_t b)
-{
-	if (a > b)
+	else
 	{
-		return b;
+		return (lastByteRecievedInd - 7) / COMMAND_SIZE;
 	}
-	return a;
 }
 
 void run()
 {
 	while (1)
 	{
-		if (isTransmissionComplete())
+		uint8_t lastReceivedCommandInd = getLastReceivedCommandInd();
+		if (lastReceivedCommandInd == lastExecutedCommandInd)
 		{
-			// Uncomment this line when temporary test is removed.
-			//numBytesReceived = 0;
-
-			// ************ TEMPORARY TEST START ************ //
-			// ********************************************** //
-			// Compare the first 3 (at most) floats received
-			// from the I2C master against 3.14;
-			uint8_t numFloats = numBytesReceived / FLOAT_SIZE;
-			numBytesReceived = 0;
-			uint8_t num = min(3, numFloats);
-			uint8_t i;
-			for (i = 0; i < num; i++)
-			{
-				debugBlinkBit(data[i].f < 3.15f && data[i].f > 3.13f);
-				_delay_ms(1000);
-			}
-
-			_delay_ms(5000);
-			// Flash once for each float received.
-			for (i = 0; i < numFloats; i++)
-			{
-				debugBlinkBit(0);
-			}
-			// ********************************************** //
-			// ************* TEMPORARY TEST END ************* //
+			continue;
 		}
+		
+		uint8_t commandToExecuteInd = lastExecutedCommandInd + 1;
+		if (commandToExecuteInd > MAX_COMMAND_INDEX)
+		{
+			commandToExecuteInd = 0;
+		}
+		
+		// Temporary debug blink:
+		debugBlinkNum((uint8_t)circularBuffer[commandToExecuteInd].mc.speed);
+		_delay_ms(1000);
+		debugBlinkNum((uint8_t)circularBuffer[commandToExecuteInd].mc.angle);
+		_delay_ms(1000);
+
+		lastExecutedCommandInd = commandToExecuteInd;	
 	}
 }
 
 int main(void)
 {
-	numBytesReceived = 0;
+	MAX_COMMAND_INDEX = (BUFFER_SIZE / COMMAND_SIZE) - 1;
+	
+	// Buffer index is initialized at last index, that way the first byte received is written to index 0.
+	lastByteRecievedInd = BUFFER_SIZE - 1;
+	lastExecutedCommandInd = MAX_COMMAND_INDEX;
 
 	// Set port PB1 as output (used for LED debugging).
 	DDRB |= (1<<DDB1);
 
 	setupI2c();
-	debugBlinkByte(0x42);
+	float debugFloat = 4.0f;
+	debugBlinkNum((uint8_t)debugFloat);
 	run();
 }
 
