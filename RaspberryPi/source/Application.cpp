@@ -73,7 +73,7 @@ void Application::execute(const Command& command)
 	switch (command.type)
 	{
 		case Command::CommandType::Debug:
-			gpioManager.sendI2C(1, { 3.141592f, 3.f, 3.1492f, 2.f }); // <- for debugging, remove later.
+			gpioManager.sendI2C(1, { 1.f, 2.f }); // <- for debugging, remove later.
 			break;
 		default:
 			break;

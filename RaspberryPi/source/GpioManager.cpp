@@ -62,16 +62,15 @@ bool GpioManager::initialize(const std::vector<int>& motorAddresses)
 }
 
 
-void GpioManager::sendI2C(int motor, float inData)
+void GpioManager::sendI2C(int motor, float inData) const
 {
 	std::vector<float> data = {inData};
 	sendI2C(motor, data);
 }
 
-void GpioManager::sendI2C(int motor, std::vector<float> data)
+void GpioManager::sendI2C(int motor, const std::vector<float>& data) const
 {
-	constexpr unsigned int I2CStop = 0xFFFFFFFF;
-	constexpr unsigned int MaxNumBytes = 256;
+	constexpr unsigned int MaxNumBytes = 80;
 
 	if (!initialized)
 	{
@@ -86,12 +85,6 @@ void GpioManager::sendI2C(int motor, std::vector<float> data)
 		return;
 	}
 
-	// Append the I2CStop bytes. This wont effect the original passed vector since it is
-	// passed by value.
-	floatint_t stop;
-	stop.i = I2CStop;
-	data.push_back(stop.f);
-
 #ifdef __linux__
 	int bytesSent = write(motorHandles[motor - 1], &data[0], sizeof(float) * data.size());
 	if (static_cast<unsigned int>(bytesSent) != sizeof(float) * data.size())
@@ -101,7 +94,7 @@ void GpioManager::sendI2C(int motor, std::vector<float> data)
 #endif
 }
 
-void GpioManager::debugSendI2C(int motor, unsigned int data)
+void GpioManager::debugSendI2C(int motor, unsigned int data) const
 {
 	
 #ifdef __linux__
@@ -115,7 +108,7 @@ void GpioManager::debugSendI2C(int motor, unsigned int data)
 #endif
 }
 
-bool GpioManager::isInitialized()
+bool GpioManager::isInitialized() const
 {
 	return initialized;
 }
