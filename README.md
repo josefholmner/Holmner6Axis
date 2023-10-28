@@ -15,8 +15,7 @@ New material will be uploded as the project progresses. One goal is to provide a
 
 ## Raspberry Pi setup
 1. Install CMake (sudo apt-get install cmake).
-
-### Build and run the Raspberry Pi application Holmner6Axis
+2. Ensure pigpio is installed (included with Raspberry Pi OS).
 
 Clone this repo to a Raspberry Pi.
 To build, run the following from the repo root:
@@ -32,5 +31,5 @@ sudo cmake --build . --config Release --target install
 Now the application can be started by running:
 
 ```
-Holmner6Axis
+sudo Holmner6Axis
 ```
