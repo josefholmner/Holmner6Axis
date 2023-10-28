@@ -22,15 +22,15 @@ Clone this repo to a Raspberry Pi.
 To build, run the following from the repo root:
 
 ```
-> cd RaspberryPi/Holmner6Axis
-> mkdir build
-> cd build
-> cmake ..
-> sudo cmake --build . --config Release --target install
+cd RaspberryPi/Holmner6Axis
+mkdir build
+cd build
+cmake ..
+sudo cmake --build . --config Release --target install
 ```
 
 Now the application can be started by running:
 
 ```
-> Holmner6Axis
+Holmner6Axis
 ```
