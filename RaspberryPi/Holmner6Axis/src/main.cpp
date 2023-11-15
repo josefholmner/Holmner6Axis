@@ -52,7 +52,7 @@ void executeRamp(int pin, const std::vector<double>& ts)
     for (const double t : ts)
     {
         // double t in seconds and uint32_t times in microseconds.
-        const uint32_t step_delta_time = static_cast<uint32>(t * 1000000.0);
+        const uint32_t step_delta_time = static_cast<uint32_t>(t * 1000000.0);
         const uint32_t next_step_half_time = startTime + step_delta_time / 2;
         const uint32_t next_step_time = startTime + step_delta_time;
 
