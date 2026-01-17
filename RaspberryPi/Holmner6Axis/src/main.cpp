@@ -84,9 +84,7 @@ int main()
     }
 
     const std::vector<double> ramp = calcRamp(2160.0, 2000.0, 2000.0, 0.45);
-    std::thread th1([&]{executeRamp(21, ramp);}); // Just for fun, run on worker thread.
-    th1.join();
-
+    executeRamp(21, ramp);
     gpioTerminate();
     return 0;
 }
