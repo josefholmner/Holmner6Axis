@@ -1,0 +1,47 @@
+Info:
+
+Motor: Nema 17 HS4401S
+Motor Driver: drv8825
+Pulse generator: Atmel Atmega 328 (Arduino Nano)
+Motor Driver in-voltage: 20v
+Motor Driver step mode: 1/4 step
+Small gear tooth count: 10 
+Large gear tooth count: 65
+Gear ratio: 2:13
+Wooden rod weight: 0.129kg
+End weight (bottle): 0.418kg
+Axis to wooden rod center-of-mass distance: 0.145m
+Axis to weight (bottle) attachment distance: 0.30m
+
+----------------------
+Execution:
+
+The motor rotated the arm about 100 degrees from a vertical position.
+The speed was low (500 deg/s on the motor side) but still high enough for a realistic axis1 movement.
+A ramp was used to allow the speed to build up, but max speed was reached long before the movement mid-point. 
+The motor was programmed to stop after about 100 degrees.
+
+----------------------
+Result:
+
+At most, the end weight (bottle) maximum weight achieved was 0.418kg.
+The nearest failing experiment was at about 0.460kg, so the real maximum is anywhere in between those values.
+Failing was due to motor skipping internally, NOT due to cog slipping. This was carefully ensured using markers on each cog.
+
+Motor torque calculation (when the arm is at 90 degrees):
+Reaction torque due to rod center-of-mass: 0.129 * 9.81 * 0.145 = 0.18349605 Nm
+Reaction torque due to end weight (bottle): 0.418 * 9.81 * 0.30 = 1.230174 Nm
+Sum of torques on arm-side (after gears): 0.18349605 + 1.230174 = 1.41367005 Nm
+Motor torque: 1.41367005 * (2/13): 0.2174877 Nm
+
+Result: Torque at the motor shaft during movement AT LEAST 0.2174877 Nm, likely a bit higher.
+
+---------------------
+Notes:
+
+The Atmel Atmega 328 was used instead of a Raspberry Pi to ensure a clean stepping signal.
+
+Running the motor in full-step mode (which should give higher torque according to many sources) caused the motor to give out lots of noise and the torque before slipping was greatly REDUCED.
+Not sure why. A different motor was tested as well, with the same result. Might be due to a faulty Motor Driver. The pulse generating code was altered to compensate for the different step mode.
+Running the motor in 1/8 step mode also made the motor run slower than expected.
+I think the tests with the other stepping modes should be taken with a grain of salt since I did not get the motor to behave as expected.
