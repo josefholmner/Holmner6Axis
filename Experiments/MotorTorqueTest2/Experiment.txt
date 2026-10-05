@@ -1,0 +1,9 @@
+Setup: 2 motors
+Axis2 + 1.7 Kg additional weight lifted from vertical.
+
+Gear ratio (per motor): 9/60 
+
+Axis to weight distance = 175mm
+
+More than 1.7kg additional weight meant motor skipping, NOT gear slipping!
+Gear skipping did not occur and was ensured by a marker pen line on small and large cog.
